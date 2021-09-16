@@ -37,7 +37,8 @@ from .tools import (
     SparsityAllocator,
     NormalSparsityAllocator,
     GlobalSparsityAllocator,
-    Conv2dDependencyAwareAllocator
+    Conv2dDependencyAwareAllocator,
+    AttentionHeadDependencyAwareAllocator
 )
 
 _logger = logging.getLogger(__name__)
@@ -699,6 +700,7 @@ class TransformerPruner(BasicPruner):
         self.dim = dim
         self.block_sparse_size = block_sparse_size if not isinstance(block_sparse_size, int) else [block_sparse_size]
         self.mode = mode
+        self.dummy_input = dummy_input
         super().__init__(model, config_list)
 
     def _validate_config_before_canonical(self, model: Module, config_list: List[Dict]):
@@ -723,4 +725,8 @@ class TransformerPruner(BasicPruner):
             if self.metric == 'fpgm':
                 self.metrics_calculator = DistMetricsCalculator(p=2, dim=self.dim, block_sparse_size=self.block_sparse_size)
         if self.sparsity_allocator is None:
-            self.sparsity_allocator = NormalSparsityAllocator(self, dim=self.dim, block_sparse_size=self.block_sparse_size)
+            if self.mode == 'normal':
+                self.sparsity_allocator = NormalSparsityAllocator(self, dim=self.dim, block_sparse_size=self.block_sparse_size)
+            elif self.mode == 'dependency_aware':
+                assert self.dummy_input is not None and self.metric in ['l1', 'l2', 'fpgm']
+                self.sparsity_allocator = AttentionHeadDependencyAwareAllocator(self, self.dim, self.dummy_input, self.block_sparse_size)
